@@ -1,47 +1,47 @@
-import * as SQLite from "expo-sqlite";
+import * as SQLite from 'expo-sqlite';
 
-let db: SQLite.SQLiteDatabase | null = null;
+export type Task = { id: number; title: string; completed: number | null };
 
-export const initDatabase = async () => {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync("tasks.db");
-
-    await db.execAsync(`
-            CREATE TABLE IF NOT EXISTS tasks(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                completed INTEGER
-            )
-            `);
+async function openDatabase() {
+  const db = await SQLite.openDatabaseAsync('tasks.db');
+  try {
+    await db.execAsync(`CREATE TABLE IF NOT EXISTS tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      completed INTEGER DEFAULT 0
+    )`);
+    return db;
+  } catch (error) {
+    await db.closeAsync();
+    throw error;
   }
-};
+}
 
-export const getTasks = async (): Promise<any[]> => {
-  if (!db) await initDatabase();
-  const rows = await db!.getAllAsync("SELECT * FROM tasks");
-  return rows;
-};
+let connection: Promise<SQLite.SQLiteDatabase> | undefined;
 
-export const insertTask = async (title: string): Promise<void> => {
-  if (!db) await initDatabase();
-  await db?.runAsync("INSERT INTO tasks (title,completed) VALUES(?,?)", [
-    title,
-    0,
-  ]);
-};
+export function initDatabase() {
+  return connection ??= openDatabase().catch(error => {
+    connection = undefined;
+    throw error;
+  });
+}
 
-export const deleteTask = async (id: number): Promise<void> => {
-  if (!db) await initDatabase();
-  await db?.runAsync("DELETE FROM tasks WHERE id = ?", [id]);
-};
+export async function getTasks() {
+  const db = await initDatabase();
+  return db.getAllAsync<Task>('SELECT id, title, completed FROM tasks ORDER BY id DESC');
+}
 
-export const toggleComplete = async (
-  id: number,
-  value: boolean,
-): Promise<void> => {
-  if (!db) await initDatabase();
-  await db?.runAsync("UPDATE tasks SET completed = ? WHERE id = ?", [
-    value ? 1 : 0,
-    id,
-  ]);
-};
+export async function insertTask(title: string) {
+  const db = await initDatabase();
+  await db.runAsync('INSERT INTO tasks (title, completed) VALUES (?, 0)', title);
+}
+
+export async function deleteTask(id: number) {
+  const db = await initDatabase();
+  await db.runAsync('DELETE FROM tasks WHERE id = ?', id);
+}
+
+export async function toggleComplete(id: number, value: boolean) {
+  const db = await initDatabase();
+  await db.runAsync('UPDATE tasks SET completed = ? WHERE id = ?', Number(value), id);
+}
